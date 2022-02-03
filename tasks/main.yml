@@ -1,2 +1,95 @@
 ---
-# tasks file for AnsibleRole-SmallstepCA
+
+- name: Make group for smallstep_user
+  ansible.builtin.group:
+    name: "{{ smallstep_system_user }}"
+    state: present
+    system: true
+
+- name: Make service user for smallstep_user
+  ansible.builtin.user:
+    name: "{{ smallstep_system_user }}"
+    commment: Make service user for Smallstep CA
+    state: present
+    create_home: false
+    groups: "{{ smallstep_system_user }}"
+    system: true
+
+- name: Get Github Latest Release asset
+  block:
+    - name: Get the latest tag from Github for Smallstep CA Step utility
+      ansible.builtin.uri:
+        url: https://api.github.com/repos/smallstep/cli/releases/latest
+      register: latest_release
+
+    - name: Print latest release details for Smallstep CA Step utility
+      ansible.builtin.debug:
+        msg: |
+          Release name: {{ latest_release.name }}
+          Release tag: {{ latest_release.tag_name }}
+
+    - name: Set variable for latest release tag without 'v'
+      set_fact:
+        latest_release_semver: "{{ latest_release.tag_name | replace('v','') }}"
+
+    - name: Download latest release for Step utility
+      ansible.builtin.get_url:
+        url: "https://github.com/smallstep/certificates/releases/download/{{ latest_release.tag_name }}/step-cli_{{ latest_release_semver }}_amd64.deb"
+        dest: "/tmp/smallstep_step.deb"
+        force: "yes"
+        owner: "smallstep_user"
+        group: "smallstep_user"
+        mode: "0770"
+        validate_certs: "yes"
+
+    - name: Get the latest tag from Github for Smallstep CA
+      ansible.builtin.uri:
+        url: https://api.github.com/repos/smallstep/certificates/releases/latest
+      register: latest_release
+
+    - name: Print latest release details for Smallstep CA Certificate Authority
+      ansible.builtin.debug:
+        msg: |
+          Release name: {{ latest_release.name }}
+          Release tag: {{ latest_release.tag_name }}
+
+    - name: Set variable for latest release tag without 'v'
+      set_fact:
+        latest_release_semver: "{{ latest_release.tag_name | replace('v','') }}"
+
+    - name: Download latest release for Smallstep CA
+      ansible.builtin.get_url:
+        url: "https://github.com/smallstep/cli/releases/download/{{ latest_release.tag_name }}/step-cli_{{ latest_release_semver }}_amd64.deb"
+        dest: "/tmp/smallstep_ca.deb"
+        force: "yes"
+        owner: "smallstep_user"
+        group: "smallstep_user"
+        mode: "0770"
+        validate_certs: "yes"
+
+- name: Install Smallstep CA Ste
+  block:
+    - name: Install Step application from debfile
+      ansible.builtin.apt:
+        deb:  "/tmp/smallstep_step.deb"
+
+    - name: Install Smallstep CA
+      block:
+        - name: Install Step application from debfile
+          ansible.builtin.apt:
+            deb:  "/tmp/smallstep_step.deb"
+
+    - name: Make Step CA directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0700'
+        owner: 
+      loop:
+        - /etc/step-ca
+        - /etc/step-ca/config
+        - /etc/step-ca/db
+
+    - name: Give Step CA permission to bind to low ports
+      ansible.builtin.shell:
+        cmd:  "setcap CAP_NET_BIND_SERVICE=+eip $(which step-ca)"

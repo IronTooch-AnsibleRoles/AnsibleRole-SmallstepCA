@@ -1,2 +1,3 @@
 ---
-# defaults file for AnsibleRole-SmallstepCA
+smallstep_system_user: smallstep_user
+credential_filename: step_creds.txt
