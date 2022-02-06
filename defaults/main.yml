@@ -1,3 +1,12 @@
 ---
 smallstep_system_user: smallstep_user
-credential_filename: step_creds.txt
+top_level_domain: example.com
+credential_filename: "step_creds.txt"
+credential_path: /etc/step-ca/{{ credential_filename }}
+installed_version_path: "/etc/step-ca/installed_ver.txt"
+dns_names:
+  - "ca.{{ top_level_domain }}"
+  - "ca.prod.{{ top_level_domain }}"
+  - "{{ ansible_hostname }}.{{ top_level_domain }}"
+  - "{{ ansible_hostname }}.prod.{{ top_level_domain }}"
+  - "{{ ansible_default_ipv4.address }}"
