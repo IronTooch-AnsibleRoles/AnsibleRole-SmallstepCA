@@ -120,6 +120,9 @@
       copy:
         content: "{{ latest_release.json.tag_name }}"
         dest: "{{ installed_version_path }}"
+        owner: "{{ smallstep_system_user }}"
+        group: "{{ smallstep_system_user }}"
+        mode: '0770'
 
     - name: Give Step CA permission to bind to low ports
       ansible.builtin.shell:
@@ -235,14 +238,12 @@
         chdir: "/etc/step-ca/"
       environment:
         STEPPATH: /etc/step-ca
-    
+
     - name: Add STEPPATH to /etc/profiles.d/
       ansible.builtin.copy:
-        content:  'export STEPPATH=/etc/step-ca'
-        dest: /etc/profiles.d/steppath
+        content: 'export STEPPATH=/etc/step-ca'
+        dest: /etc/profile.d/steppath.sh
         force: true
         owner: "root"
         group: "root"
         mode: "0644"
-
-
