@@ -1,249 +1,120 @@
 ---
+- community.general.discord:
+    webhook_id: "{{ lookup('env', 'DISCORD_ID') }}"
+    webhook_token: "{{ lookup('env', 'DISCORD_TOKEN') }}"
+    content: "StepCA Certificate Authority: Beginning role deployment... "
 
-- name: Install Dependency packages
-  package:
-    name:
-      - acl
-    state: present
+- community.general.discord:
+    webhook_id: "{{ lookup('env', 'DISCORD_ID') }}"
+    webhook_token: "{{ lookup('env', 'DISCORD_TOKEN') }}"
+    content: "StepCA Certificate Authority: Installing dependencies... "
+  tags: install_dependencies
 
-- name: Make group for smallstep_user
-  ansible.builtin.group:
-    name: "{{ smallstep_system_user }}"
-    state: present
-    system: true
+- name: Install dependencies
+  ansible.builtin.include_tasks:
+    file: "install_dependencies.yml"
+  tags: install_dependencies
 
-- name: Make service user for smallstep_user
-  ansible.builtin.user:
-    name: "{{ smallstep_system_user }}"
-    state: present
-    create_home: true
-    groups: "{{ smallstep_system_user }}"
-    system: true
-    shell: /bin/bash
+- community.general.discord:
+    webhook_id: "{{ lookup('env', 'DISCORD_ID') }}"
+    webhook_token: "{{ lookup('env', 'DISCORD_TOKEN') }}"
+    content: "StepCA Certificate Authority: Creating Service Users... "
+  tags: create_serviceuser
 
-# - name: Check if Smallstep / Context is installed
-#   ansible.builtin.command: cat /home/{{ smallstep_system_user }}/.step/contexts.json
-#   register: present_contexts
-#   changed_when: false
-#   ignore_errors: true
+- name: Add Service User
+  ansible.builtin.include_tasks:
+    file: "create_serviceuser.yml"
+  tags: create_serviceuser
 
-# - name: Present context exists, no changes will be made
-#   ansible.builtin.debug:
-#     msg: "Context {{ context }} already exists"
-#   # when: present_contexts.stdout.find(context) != -1
+- community.general.discord:
+    webhook_id: "{{ lookup('env', 'DISCORD_ID') }}"
+    webhook_token: "{{ lookup('env', 'DISCORD_TOKEN') }}"
+    content: "StepCA Certificate Authority: Pulling Github Tag... "
+  tags: install_smallstep
 
-- name: Get Github Latest Release asset
-  block:
-    - name: Get the latest tag from Github for Smallstep CA Step utility
-      ansible.builtin.uri:
-        url: https://api.github.com/repos/smallstep/cli/releases/latest
-      register: latest_release
+- name: Get the latest tag from Github for Smallstep CA Step utility
+  ansible.builtin.uri:
+    url: https://api.github.com/repos/smallstep/cli/releases/latest
+  register: latest_release
+  tags: install_smallstep
 
-    - name: Set latest release name
-      set_fact:
-        latest_release_name: "{{ latest_release.json.name }}"
+- name: Get version from file
+  ansible.builtin.shell:
+    cmd: "test -f \"{{ installed_version_path }}\" && cat {{ installed_version_path }}"
+  register: installed_version
+  failed_when: false
+  changed_when: false
+  tags: install_smallstep
 
-    - name: Set latest release tag_name
-      set_fact:
-        latest_release_tagname: "{{ latest_release.json.tag_name }}"
+- name: Print installed_version
+  ansible.builtin.debug:
+    msg: "{{ installed_version }}"
+    verbosity: 0
 
-    - name: Print latest release details for Smallstep CA Step utility
-      ansible.builtin.debug:
-        msg: |
-          Release name: {{ latest_release_name }}
-          Release tag: {{ latest_release_tagname }}
+- name: Print tag_name
+  ansible.builtin.debug:
+    msg: "{{ latest_release.json.tag_name }}"
+    verbosity: 0
 
-    - name: Set variable for latest release tag without 'v'
-      set_fact:
-        latest_release_semver: "{{ latest_release.json.tag_name | replace('v','') }}"
+- name: Print comparison
+  ansible.builtin.debug:
+    msg: "{{ installed_version.stdout != latest_release.json.tag_name }}"
+    verbosity: 0
 
-    - name: Download latest release for Step utility
-      ansible.builtin.get_url:
-        url: "https://github.com/smallstep/cli/releases/download/{{ latest_release.json.tag_name }}/step-cli_{{ latest_release_semver }}_amd64.deb"
-        dest: "/tmp/smallstep_step.deb"
-        force: "yes"
-        owner: "smallstep_user"
-        group: "smallstep_user"
-        mode: "0770"
-        validate_certs: "yes"
+- community.general.discord:
+    webhook_id: "{{ lookup('env', 'DISCORD_ID') }}"
+    webhook_token: "{{ lookup('env', 'DISCORD_TOKEN') }}"
+    content: "StepCA Certificate Authority: Installing StepCA... "
+  tags: install_smallstep
 
-    - name: Get the latest tag from Github for Smallstep CA
-      ansible.builtin.uri:
-        url: https://api.github.com/repos/smallstep/certificates/releases/latest
-      register: latest_release
+- name: Install Smallstep CA if needed
+  ansible.builtin.include_tasks:
+    file: "install_stepca.yml"
+  when: (installed_version.stdout != latest_release.json.tag_name)
+  tags: install_smallstep
 
-    - name: Print latest release details for Smallstep CA Certificate Authority
-      ansible.builtin.debug:
-        msg: |
-          Release name: {{ latest_release.json.name }}
-          Release tag: {{ latest_release.json.tag_name }}
+- name: Check if CA initialized
+  ansible.builtin.stat:
+    path: "{{ ca_config_location }}"
+  register: ca_initiated
+  tags: initiate_ca
 
-    - name: Set variable for latest release tag without 'v'
-      set_fact:
-        latest_release_semver: "{{ latest_release.json.tag_name | replace('v','') }}"
+- community.general.discord:
+    webhook_id: "{{ lookup('env', 'DISCORD_ID') }}"
+    webhook_token: "{{ lookup('env', 'DISCORD_TOKEN') }}"
+    content: "StepCA Certificate Authority: Initializing StepCA... "
+  tags: initiate_ca
 
-    - name: Download latest release for Smallstep CA
-      ansible.builtin.get_url:
-        url: "https://github.com/smallstep/certificates/releases/download/{{ latest_release.json.tag_name }}/step-ca_{{ latest_release_semver }}_amd64.deb"
-        dest: "/tmp/smallstep_ca.deb"
-        force: "yes"
-        owner: "smallstep_user"
-        group: "smallstep_user"
-        mode: "0770"
-        validate_certs: "yes"
-  # when: present_contexts.stdout.find(context) == -1
+- name: Initialize Smallstep CA if needed
+  ansible.builtin.include_tasks:
+    file: "init_stepca.yml"
+  when: not ca_initiated.stat.exists
+  tags: initiate_ca
 
-- name: Install Smallstep CA Step
-  block:
-    - name: Install Step application from debfile
-      ansible.builtin.apt:
-        deb: "/tmp/smallstep_step.deb"
+- name: Check if service file installed
+  ansible.builtin.stat:
+    path: "{{ step_service_location }}"
+  register: service_deployed
+  tags: deploy_service
 
-    - name: Install Step application from debfile
-      ansible.builtin.apt:
-        deb: "/tmp/smallstep_ca.deb"
+- community.general.discord:
+    webhook_id: "{{ lookup('env', 'DISCORD_ID') }}"
+    webhook_token: "{{ lookup('env', 'DISCORD_TOKEN') }}"
+    content: "StepCA Certificate Authority: Installing Service... "
+  tags: deploy_service
 
-    - name: Make Step CA directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        mode: '0700'
-        owner: "{{ smallstep_system_user }}"
-        group: "{{ smallstep_system_user }}"
-      loop:
-        - /etc/step-ca
-        - /etc/step-ca/config
-        - /etc/step-ca/db
-        - /var/step-ca
+- name: Install Service File if needed
+  ansible.builtin.include_tasks:
+    file: "install_service.yml"
+  when: not service_deployed.stat.exists
+  tags: deploy_service
 
-    - name: Make current version file (to save re-installs / support idempotence)
-      copy:
-        content: "{{ latest_release.json.tag_name }}"
-        dest: "{{ installed_version_path }}"
-        owner: "{{ smallstep_system_user }}"
-        group: "{{ smallstep_system_user }}"
-        mode: '0770'
 
-    - name: Give Step CA permission to bind to low ports
-      ansible.builtin.shell:
-        cmd: "setcap CAP_NET_BIND_SERVICE=+eip $(which step-ca)"
 
-    - name: Set DNS names for Step CA
-      set_fact:
-        step_dns_names: "--dns {{ dns_names | join (\" --dns \") }}"
 
-    - name: Make full Step Install command
-      set_fact:
-        step_init_cmd: >-
-          step ca init
-          --ssh
-          --deployment-type standalone
-          --name "{{ top_level_domain | capitalize }} CA"
-          {{ step_dns_names }}
-          --address ":443"
-          --provisioner "ca@{{ top_level_domain }}"
-          --password-file {{ credential_path }}
-          --provisioner-password-file {{ credential_path }}
 
-    - name: Print step install command
-      ansible.builtin.debug:
-        msg: "Cmd: {{ step_init_cmd }}"
-        verbosity: 0
 
-    - name: Set password for Step CA
-      set_fact:
-        step_ca_password: "{{ lookup('password', '/dev/null') }}"
-
-    - name: Make password file for Step CA
-      copy:
-        content: "{{ step_ca_password }}"
-        dest: "{{ credential_path }}"
-        owner: "{{ smallstep_system_user }}"
-        group: "{{ smallstep_system_user }}"
-        mode: '0700'
-
-    - name: Chown /etc/step-ca directory
-      ansible.builtin.file:
-        path: /etc/step-ca
-        state: directory
-        recurse: true
-        owner: '{{ smallstep_system_user }}'
-        group: '{{ smallstep_system_user }}'
-
-    - name: Init Step CA
-      become_user: "{{ smallstep_system_user }}"
-      ansible.builtin.command:
-        cmd: " {{ step_init_cmd }}"
-        chdir: "/etc/step-ca/"
-
-# Move Step CA for service user
-    - name: checking if the user step directory exists
-      stat:
-        path: /home/{{ smallstep_system_user }}/.step/
-      register: user_step_dir_exists
-
-    - name: Moving Step Folders
-      copy:
-        src: "/home/{{ smallstep_system_user }}/.step/"
-        dest: "/etc/step-ca/"
-        owner: "{{ smallstep_system_user }}"
-        group: "{{ smallstep_system_user }}"
-        mode: '0770'
-        remote_src: true
-      when: user_step_dir_exists.stat.exists
-
-    # - name: Pause to confirm what is in the /etc/step-ca directory
-    #   pause:
-
-    - name: Delete content & directory
-      file:
-        path: "/home/{{ smallstep_system_user }}/.step/"
-        state: absent
-
-    - name: Template out service file
-      ansible.builtin.template:
-        src: step-ca.service.j2
-        dest: /etc/systemd/system/step-ca.service
-        force: true
-        mode: '0644'  # Ansible-Lint hates when this isn't set
-
-    - name: Fix default.json
-      ansible.builtin.replace:
-        path: "/etc/step-ca/config/defaults.json"
-        regexp: "/home/{{ smallstep_system_user }}/.step"
-        replace: "/etc/step-ca"
-        owner: "{{ smallstep_system_user }}"
-        group: "{{ smallstep_system_user }}"
-        mode: '0770'
-
-    - name: Fix ca.json
-      ansible.builtin.replace:
-        path: "/etc/step-ca/config/ca.json"
-        regexp: "/home/{{ smallstep_system_user }}/.step"
-        replace: "/etc/step-ca"
-        owner: "{{ smallstep_system_user }}"
-        group: "{{ smallstep_system_user }}"
-        mode: '0770'
-
-    - name: Ensure step-ca is started
-      ansible.builtin.service:
-        name: step-ca
-        state: started
-        enabled: true
-
-    - name: Init ACME provisioner
-      become_user: "{{ smallstep_system_user }}"
-      ansible.builtin.command:
-        cmd: "step ca provisioner add acme --type ACME"
-        chdir: "/etc/step-ca/"
-      environment:
-        STEPPATH: /etc/step-ca
-
-    - name: Add STEPPATH to /etc/profiles.d/
-      ansible.builtin.copy:
-        content: 'export STEPPATH=/etc/step-ca'
-        dest: /etc/profile.d/steppath.sh
-        force: true
-        owner: "root"
-        group: "root"
-        mode: "0644"
+- community.general.discord:
+    webhook_id: "{{ lookup('env', 'DISCORD_ID') }}"
+    webhook_token: "{{ lookup('env', 'DISCORD_TOKEN') }}"
+    content: "StepCA Certificate Authority: Complete! "

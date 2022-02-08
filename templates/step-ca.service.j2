@@ -11,8 +11,8 @@ ConditionFileNotEmpty=/etc/step-ca/{{ credential_filename }}
 
 [Service]
 Type=simple
-User={{ smallstep_system_user }}
-Group={{ smallstep_system_user }}
+User={{ system_user }}
+Group={{ system_user }}
 Environment=STEPPATH=/etc/step-ca
 WorkingDirectory=/etc/step-ca
 ExecStart=/usr/bin/step-ca config/ca.json --password-file {{ credential_filename }}
